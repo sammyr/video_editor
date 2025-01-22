@@ -9,9 +9,19 @@ interface TimelineToolsProps {
   selectedTool: 'select' | 'razor' | 'hand';
   onToolChange: (tool: 'select' | 'razor' | 'hand') => void;
   currentTime: number;
+  snapEnabled: boolean;
+  onSnapChange: (enabled: boolean) => void;
 }
 
-export function TimelineTools({ zoom, onZoomChange, selectedTool, onToolChange, currentTime }: TimelineToolsProps) {
+export function TimelineTools({ 
+  zoom, 
+  onZoomChange, 
+  selectedTool, 
+  onToolChange, 
+  currentTime,
+  snapEnabled,
+  onSnapChange 
+}: TimelineToolsProps) {
   // Formatiere die aktuelle Zeit
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
@@ -29,8 +39,9 @@ export function TimelineTools({ zoom, onZoomChange, selectedTool, onToolChange, 
           onClick={() => onToolChange('select')}
           title="Auswahlwerkzeug (V)"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-            <path d="M13 1l3.5 3.5-10 10L3 18l3.5-3.5 10-10z" />
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>
+            <path d="M13 13l6 6"/>
           </svg>
         </button>
         
@@ -39,8 +50,10 @@ export function TimelineTools({ zoom, onZoomChange, selectedTool, onToolChange, 
           onClick={() => onToolChange('razor')}
           title="Rasierklinge (C)"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-            <path d="M19 3L5 17l-2 4 4-2L21 5z" />
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 3L9 15"/>
+            <path d="M9 15l-6 2 2-6"/>
+            <path d="M9 15l3-3"/>
           </svg>
         </button>
 
@@ -49,8 +62,24 @@ export function TimelineTools({ zoom, onZoomChange, selectedTool, onToolChange, 
           onClick={() => onToolChange('hand')}
           title="Hand-Werkzeug (H)"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-            <path d="M12 1c-3.3 0-6 2.7-6 6v6l-2 2v3h16v-3l-2-2V7c0-3.3-2.7-6-6-6z" />
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/>
+            <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/>
+            <path d="M10 10V2a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/>
+            <path d="M6 19v1a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-8"/>
+          </svg>
+        </button>
+
+        {/* Snap-Button */}
+        <button
+          className={`p-2 rounded-lg ${snapEnabled ? 'bg-white/10' : 'hover:bg-white/5'}`}
+          onClick={() => onSnapChange(!snapEnabled)}
+          title="Snapping (S)"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 5v14"/>
+            <path d="M19 5v14"/>
+            <path d="M5 12h14"/>
           </svg>
         </button>
       </div>
@@ -67,8 +96,10 @@ export function TimelineTools({ zoom, onZoomChange, selectedTool, onToolChange, 
           onClick={() => onZoomChange(Math.max(0.1, zoom / 1.2))}
           title="Verkleinern (-)"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-            <path d="M19 13H5v-2h14v2z" />
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21l-4.3-4.3"/>
+            <path d="M8 11h6"/>
           </svg>
         </button>
         
@@ -86,8 +117,11 @@ export function TimelineTools({ zoom, onZoomChange, selectedTool, onToolChange, 
           onClick={() => onZoomChange(Math.min(5, zoom * 1.2))}
           title="Vergrößern (+)"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21l-4.3-4.3"/>
+            <path d="M11 8v6"/>
+            <path d="M8 11h6"/>
           </svg>
         </button>
       </div>

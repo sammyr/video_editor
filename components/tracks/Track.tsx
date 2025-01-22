@@ -11,10 +11,44 @@ interface TrackComponentProps extends TrackProps {
   onClipChange?: (clipId: string, newStart: number, newDuration: number) => void;
   onClipSplit?: (clipId: string, splitPoint: number) => void;
   selectedTool?: 'select' | 'razor' | 'hand';
+  snapEnabled?: boolean;
+  allTracks?: TrackProps[]; // Alle Tracks für Clip-Snapping
 }
 
-export function Track({ track, zoom, onClipSelect, onClipChange, onClipSplit, selectedTool }: TrackComponentProps) {
+export function Track({ 
+  track, 
+  zoom, 
+  onClipSelect, 
+  onClipChange, 
+  onClipSplit, 
+  selectedTool,
+  snapEnabled,
+  allTracks = []
+}: TrackComponentProps) {
   const [isDragOver, setIsDragOver] = useState(false);
+
+  // Prüft, ob ein Clip an der angegebenen Position eine Überlappung verursachen würde
+  const checkOverlap = (clipId: string, newStart: number, duration: number): boolean => {
+    return track.clips.some(existingClip => {
+      if (existingClip.id === clipId) return false;
+      
+      const clipEnd = newStart + duration;
+      const existingEnd = existingClip.start + existingClip.duration;
+      
+      return (
+        (newStart >= existingClip.start && newStart < existingEnd) ||
+        (clipEnd > existingClip.start && clipEnd <= existingEnd) ||
+        (newStart <= existingClip.start && clipEnd >= existingEnd)
+      );
+    });
+  };
+
+  // Behandelt Änderungen an Clips mit Überlappungsprüfung
+  const handleClipChange = (clipId: string, newStart: number, duration: number) => {
+    if (!checkOverlap(clipId, newStart, duration)) {
+      onClipChange?.(clipId, newStart, duration);
+    }
+  };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -56,19 +90,15 @@ export function Track({ track, zoom, onClipSelect, onClipChange, onClipSplit, se
             ? parseFloat(mediaItem.duration.split(':').reduce((acc: number, time: string) => (60 * acc) + parseFloat(time), 0))
             : (typeof mediaItem.duration === 'number' ? mediaItem.duration : 30);
 
+          // Prüfe auf Überlappungen beim Hinzufügen neuer Clips
           const clipId = `clip-${Date.now()}`;
-          onClipChange?.(clipId, Math.max(0, snappedTime), duration);
+          if (!checkOverlap(clipId, Math.max(0, snappedTime), duration)) {
+            onClipChange?.(clipId, Math.max(0, snappedTime), duration);
+          }
         }
       }
     } catch (error) {
       console.error('Fehler beim Drop:', error);
-    }
-  };
-
-  const handleClipSplit = (clipId: string, splitPoint: number) => {
-    const clip = track.clips.find(c => c.id === clipId);
-    if (clip && onClipSplit) {
-      onClipSplit(clipId, splitPoint);
     }
   };
 
@@ -100,19 +130,23 @@ export function Track({ track, zoom, onClipSelect, onClipChange, onClipSplit, se
           </span>
         </div>
       </div>
-      
-      <div className="ml-24 h-full relative">
+
+      <div className="absolute left-24 right-0 h-full">
         {track.clips.map((clip) => (
           <TrackClip
             key={clip.id}
             clip={clip}
             zoom={zoom}
-            onSelect={onClipSelect}
-            onClipChange={(newStart, newDuration) => 
-              onClipChange?.(clip.id, newStart, newDuration)
-            }
-            onClipSplit={handleClipSplit}
             selectedTool={selectedTool}
+            snapEnabled={snapEnabled}
+            allClips={track.clips}
+            onSelect={onClipSelect}
+            onClipChange={(clipId, newStart, newDuration) =>
+              handleClipChange(clipId, newStart, newDuration)
+            }
+            onClipSplit={(clipId, splitPoint) =>
+              onClipSplit?.(clipId, splitPoint)
+            }
           />
         ))}
       </div>

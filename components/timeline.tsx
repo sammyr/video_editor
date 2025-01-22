@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Track } from './editor/types';
+import { Track, Clip } from './editor/types';
 import { Track as TrackComponent } from './tracks/Track';
 import { TimelineRuler } from './timeline/TimelineRuler';
 import { TimelineTools } from './timeline/TimelineTools';
@@ -22,6 +22,7 @@ export function Timeline({ tracks, onClipSelect, onClipChange, onTimelineOffsetC
   const [startDragX, setStartDragX] = useState(0);
   const [timelineOffset, setTimelineOffset] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [snapEnabled, setSnapEnabled] = useState(true);
   const timelineRef = useRef<HTMLDivElement>(null);
   const [timelineWidth, setTimelineWidth] = useState(0);
 
@@ -46,7 +47,7 @@ export function Timeline({ tracks, onClipSelect, onClipChange, onTimelineOffsetC
 
   const handleTimelineMouseMove = (e: React.MouseEvent) => {
     if (isDraggingTimeline && selectedTool === 'hand') {
-      const delta = (e.clientX - startDragX) / 2; // Halbiere die Bewegungsgeschwindigkeit
+      const delta = (e.clientX - startDragX) / 2;
       const newOffset = timelineOffset + delta;
       setTimelineOffset(newOffset);
       onTimelineOffsetChange(newOffset);
@@ -79,14 +80,30 @@ export function Timeline({ tracks, onClipSelect, onClipChange, onTimelineOffsetC
     const remainingDuration = clip.duration - splitDuration;
 
     // Erstelle die neuen Clips
-    const newClip1Id = `${clipId}-1`;
-    const newClip2Id = `${clipId}-2`;
+    const newClip1: Clip = {
+      id: `${clipId}-1`,
+      name: `${clip.name} (1)`,
+      start: clip.start,
+      duration: splitDuration,
+      type: clip.type,
+      track: trackId
+    };
 
-    // Aktualisiere den ersten Teil
-    onClipChange(trackId, newClip1Id, clip.start, splitDuration);
+    const newClip2: Clip = {
+      id: `${clipId}-2`,
+      name: `${clip.name} (2)`,
+      start: splitPoint,
+      duration: remainingDuration,
+      type: clip.type,
+      track: trackId
+    };
 
-    // Füge den zweiten Teil hinzu
-    onClipChange(trackId, newClip2Id, splitPoint, remainingDuration);
+    // Aktualisiere den State über die Parent-Komponente
+    // Entferne zuerst den ursprünglichen Clip
+    onClipChange(trackId, clipId, 0, 0);
+    // Füge dann die neuen Clips hinzu
+    onClipChange(trackId, newClip1.id, newClip1.start, newClip1.duration);
+    onClipChange(trackId, newClip2.id, newClip2.start, newClip2.duration);
   };
 
   // Tastaturkürzel
@@ -101,6 +118,9 @@ export function Timeline({ tracks, onClipSelect, onClipChange, onTimelineOffsetC
           break;
         case 'h':
           setSelectedTool('hand');
+          break;
+        case 's':
+          setSnapEnabled(prev => !prev);
           break;
         case '-':
           handleZoomChange(Math.max(0.1, zoom / 1.2));
@@ -130,6 +150,8 @@ export function Timeline({ tracks, onClipSelect, onClipChange, onTimelineOffsetC
         selectedTool={selectedTool}
         onToolChange={handleToolChange}
         currentTime={currentTime}
+        snapEnabled={snapEnabled}
+        onSnapChange={setSnapEnabled}
       />
 
       <TimelineRuler
@@ -153,6 +175,7 @@ export function Timeline({ tracks, onClipSelect, onClipChange, onTimelineOffsetC
               track={track}
               zoom={zoom}
               selectedTool={selectedTool}
+              snapEnabled={snapEnabled}
               onClipSelect={onClipSelect}
               onClipChange={(clipId, newStart, newDuration) =>
                 onClipChange(track.id, clipId, newStart, newDuration)

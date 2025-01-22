@@ -26,18 +26,78 @@ export function Editor() {
   };
 
   const handleClipChange = (trackId: number, clipId: string, newStart: number, newDuration: number) => {
-    console.log('handleClipChange:', { trackId, clipId, newStart, newDuration }); // Debug-Ausgabe
-    
     setTracks(prevTracks => {
-      const newTracks = prevTracks.map(track => {
-        if (track.id !== trackId) return track;
+      // Wenn die Dauer 0 ist, entferne den Clip
+      if (newDuration === 0) {
+        return prevTracks.map(t => {
+          if (t.id === trackId) {
+            return {
+              ...t,
+              clips: t.clips.filter(c => c.id !== clipId)
+            };
+          }
+          return t;
+        });
+      }
 
-        // Wenn es ein existierender Clip ist
-        const existingClip = track.clips.find(c => c.id === clipId);
+      // Finde den Track
+      const track = prevTracks.find(t => t.id === trackId);
+      if (!track) return prevTracks;
+
+      // Wenn es ein Split-Operation ist (clipId enthält "-1" oder "-2")
+      if (clipId.includes('-1') || clipId.includes('-2')) {
+        const originalClipId = clipId.split('-')[0];
+        
+        // Prüfe, ob der Split-Clip bereits existiert
+        const existingSplitClip = track.clips.find(c => c.id === clipId);
+        if (existingSplitClip) {
+          // Aktualisiere nur die Position des existierenden Split-Clips
+          return prevTracks.map(t => {
+            if (t.id === trackId) {
+              return {
+                ...t,
+                clips: t.clips.map(c => 
+                  c.id === clipId 
+                    ? { ...c, start: newStart, duration: newDuration }
+                    : c
+                )
+              };
+            }
+            return t;
+          });
+        }
+
+        // Erstelle einen neuen Split-Clip
+        return prevTracks.map(t => {
+          if (t.id === trackId) {
+            return {
+              ...t,
+              clips: t.clips
+                .filter(c => c.id !== originalClipId && c.duration > 0) // Entferne den ursprünglichen Clip und Clips mit Dauer 0
+                .concat({ // Füge den neuen Clip hinzu
+                  id: clipId,
+                  name: `Clip ${clipId.includes('-1') ? '1' : '2'}`,
+                  start: newStart,
+                  duration: newDuration,
+                  track: trackId,
+                  type: t.type,
+                })
+                .sort((a, b) => a.start - b.start) // Sortiere nach Startzeit
+            };
+          }
+          return t;
+        });
+      }
+
+      // Normaler Clip-Update oder neuer Clip
+      return prevTracks.map(t => {
+        if (t.id !== trackId) return t;
+
+        const existingClip = t.clips.find(c => c.id === clipId);
         if (existingClip) {
           return {
-            ...track,
-            clips: track.clips.map(clip =>
+            ...t,
+            clips: t.clips.map(clip =>
               clip.id === clipId
                 ? { ...clip, start: newStart, duration: newDuration }
                 : clip
@@ -45,25 +105,22 @@ export function Editor() {
           };
         }
 
-        // Wenn es ein neuer Clip ist
+        // Neuer Clip
         return {
-          ...track,
+          ...t,
           clips: [
-            ...track.clips,
+            ...t.clips,
             {
               id: clipId,
-              name: `Clip ${track.clips.length + 1}`,
+              name: `Clip ${t.clips.length + 1}`,
               start: newStart,
               duration: newDuration,
               track: trackId,
-              type: track.type,
+              type: t.type,
             },
-          ],
+          ].sort((a, b) => a.start - b.start),
         };
       });
-
-      console.log('New tracks state:', newTracks); // Debug-Ausgabe
-      return newTracks;
     });
   };
 
