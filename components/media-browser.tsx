@@ -1,117 +1,80 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Video, Music, Search } from 'lucide-react';
-import { useDraggable } from '@dnd-kit/core';
-
-interface MediaFile {
-  id: string;
-  name: string;
-  type: 'video' | 'audio';
-  duration: string;
-}
-
-const mediaFilesData: MediaFile[] = [
-  { id: '1', name: 'Video 1.mp4', type: 'video', duration: '0:30' },
-  { id: '2', name: 'Audio 1.mp3', type: 'audio', duration: '1:00' },
-  { id: '3', name: 'Video 2.mp4', type: 'video', duration: '1:30' },
-  { id: '4', name: 'Audio 2.mp3', type: 'audio', duration: '2:00' },
-  { id: '5', name: 'Video 3.mp4', type: 'video', duration: '2:30' },
-  { id: '6', name: 'Audio 3.mp3', type: 'audio', duration: '3:00' },
-];
+import { MediaFile } from './editor/types';
 
 export function MediaBrowser() {
-  const [mediaFiles, setMediaFiles] = useState(mediaFilesData);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState('name');
+  const mediaFiles: MediaFile[] = [
+    { name: 'Video 1', type: 'video', duration: '00:30' },
+    { name: 'Video 2', type: 'video', duration: '01:00' },
+    { name: 'Audio 1', type: 'audio', duration: '00:45' },
+    { name: 'Audio 2', type: 'audio', duration: '02:00' },
+  ];
 
-  const draggableRefs = mediaFiles.map(() => useDraggable({
-    id: `media-${Math.random()}`,
-    data: {
-      type: 'media',
-    },
-  }));
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, file: MediaFile) => {
+    // Setze die Drag-Effekte
+    e.dataTransfer.effectAllowed = 'copy';
+    
+    // Setze ein visuelles Drag-Image
+    const dragImage = document.createElement('div');
+    dragImage.className = 'p-2 rounded bg-blue-500 text-white text-sm';
+    dragImage.textContent = file.name;
+    document.body.appendChild(dragImage);
+    e.dataTransfer.setDragImage(dragImage, 0, 0);
+    setTimeout(() => document.body.removeChild(dragImage), 0);
 
-  const handleDragStart = (event: DragEvent<HTMLDivElement>, file: MediaFile) => {
-    event.dataTransfer.setData('application/json', JSON.stringify(file));
+    // Setze die Clip-Daten
+    const clipData = {
+      name: file.name,
+      type: file.type,
+      duration: file.duration
+    };
+    e.dataTransfer.setData('application/json', JSON.stringify(clipData));
   };
 
-  const filteredFiles = mediaFiles
-    .filter(file => 
-      file.name.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    .sort((a, b) => {
-      if (sortBy === 'name') {
-        return a.name.localeCompare(b.name);
-      } else if (sortBy === 'duration') {
-        return a.duration.localeCompare(b.duration);
-      }
-      return 0;
-    });
-
   return (
-    <div className="w-80 h-full bg-background border-r">
-      <div className="p-4 border-b">
-        <h2 className="text-lg font-semibold mb-4">Media Browser</h2>
-        <div className="space-y-2">
-          <div className="relative">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search media..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8"
-            />
-          </div>
-          <Select value={sortBy} onValueChange={setSortBy}>
-            <SelectTrigger>
-              <SelectValue placeholder="Sort by..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="name">Name</SelectItem>
-              <SelectItem value="duration">Duration</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+    <div className="h-full bg-[#1e1e1e] border-r border-[#2a2a2a]">
+      <div className="p-4 border-b border-[#2a2a2a]">
+        <h2 className="text-sm font-medium text-white/90">Media Browser</h2>
       </div>
-      <ScrollArea className="h-[calc(100%-129px)]">
-        <div className="p-4">
-          {filteredFiles.map((file, index) => {
-            const { attributes, listeners, setNodeRef, transform, isDragging } = draggableRefs[index];
-            return (
-              <div
-                key={file.id}
-                ref={setNodeRef}
-                {...attributes}
-                {...listeners}
-                className={`p-3 rounded-lg border ${
-                  file.type === 'video' ? 'bg-blue-50/5' : 'bg-green-50/5'
-                } ${isDragging ? 'opacity-50' : ''} cursor-grab active:cursor-grabbing`}
-                draggable
-                onDragStart={(e) => handleDragStart(e, file)}
-                style={{
-                  transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-                }}
-              >
-                <div className="flex items-center space-x-3">
+      
+      <ScrollArea className="h-[calc(100%-57px)]">
+        <div className="p-4 space-y-2">
+          {mediaFiles.map((file, index) => (
+            <div
+              key={index}
+              draggable
+              onDragStart={(e) => handleDragStart(e, file)}
+              className={`
+                p-3 rounded-lg cursor-move select-none
+                ${file.type === 'video' ? 'bg-blue-500/10' : 'bg-green-500/10'}
+                ${file.type === 'video' ? 'hover:bg-blue-500/20' : 'hover:bg-green-500/20'}
+                transition-colors
+              `}
+            >
+              <div className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-md flex items-center justify-center ${
+                  file.type === 'video' ? 'bg-blue-500/20' : 'bg-green-500/20'
+                }`}>
                   {file.type === 'video' ? (
-                    <Video className="w-5 h-5" />
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-blue-500">
+                      <path d="M4 4h16v12H4z" />
+                      <path d="M2 18h20v2H2z" />
+                    </svg>
                   ) : (
-                    <Music className="w-5 h-5" />
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-green-500">
+                      <path d="M12 3v18M3 12h18" />
+                    </svg>
                   )}
-                  <div>
-                    <div className="font-medium">{file.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {file.duration}
-                    </div>
-                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-white/90">{file.name}</div>
+                  <div className="text-xs text-white/60">{file.duration}</div>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       </ScrollArea>
     </div>
