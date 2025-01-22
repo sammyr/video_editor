@@ -28,14 +28,8 @@ export function MediaBrowser() {
     const clipData = {
       name: file.name,
       type: file.type,
-      duration: file.duration,
-      id: `clip-${Date.now()}`  // Füge eine eindeutige ID hinzu
+      duration: file.duration
     };
-
-    // Debug-Ausgabe
-    console.log('Drag Start Data:', clipData);
-
-    // Setze die Daten im DataTransfer
     e.dataTransfer.setData('application/json', JSON.stringify(clipData));
   };
 

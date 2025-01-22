@@ -7,7 +7,6 @@ import { MediaBrowser } from '@/components/media-browser';
 import { PreviewPanel } from '@/components/preview-panel';
 import { Timeline } from '@/components/timeline';
 import { Track, Clip } from './editor/types';
-import { settings } from '@/config/editor-settings';
 
 export function Editor() {
   const [tracks, setTracks] = useState<Track[]>([
@@ -21,35 +20,16 @@ export function Editor() {
   const [selectedClip, setSelectedClip] = useState<string | null>(null);
   const [timelineOffset, setTimelineOffset] = useState(0);
   const [zoom, setZoom] = useState(1);
-  const [timelineDuration, setTimelineDuration] = useState(settings.timeline.defaultDuration); // 60 Minuten
-
-  // Berechne die benötigte Timeline-Dauer basierend auf allen Clips
-  const calculateRequiredDuration = (currentTracks: Track[]) => {
-    let maxEndTime = 0;
-    
-    currentTracks.forEach(track => {
-      track.clips.forEach(clip => {
-        const clipEndTime = clip.start + clip.duration;
-        maxEndTime = Math.max(maxEndTime, clipEndTime);
-      });
-    });
-
-    // Füge 30 Sekunden Puffer hinzu und runde auf die nächsten 10 Sekunden auf
-    const newDuration = Math.ceil((maxEndTime + 30) / 10) * 10;
-    
-    // Mindestens 4 Minuten oder die berechnete Dauer, je nachdem was größer ist
-    return Math.max(240, newDuration);
-  };
 
   const handleClipSelect = (clipName: string) => {
     setSelectedClip(clipName);
   };
 
-  const handleClipChange = (trackId: number, clipId: string, newStart: number, clipDuration: number) => {
+  const handleClipChange = (trackId: number, clipId: string, newStart: number, newDuration: number) => {
     setTracks(prevTracks => {
       // Wenn die Dauer 0 ist, entferne den Clip
-      if (clipDuration === 0) {
-        const updatedTracks = prevTracks.map(t => {
+      if (newDuration === 0) {
+        return prevTracks.map(t => {
           if (t.id === trackId) {
             return {
               ...t,
@@ -58,86 +38,89 @@ export function Editor() {
           }
           return t;
         });
-
-        // Aktualisiere die Timeline-Dauer nach dem Entfernen des Clips
-        const newDuration = calculateRequiredDuration(updatedTracks);
-        setTimelineDuration(newDuration);
-        return updatedTracks;
       }
 
-      let updatedTracks: Track[];
+      // Finde den Track
+      const track = prevTracks.find(t => t.id === trackId);
+      if (!track) return prevTracks;
 
-      // Wenn es ein Split-Operation ist
+      // Wenn es ein Split-Operation ist (clipId enthält "-1" oder "-2")
       if (clipId.includes('-1') || clipId.includes('-2')) {
         const originalClipId = clipId.split('-')[0];
-        updatedTracks = prevTracks.map(t => {
-          if (t.id === trackId) {
-            const existingSplitClip = t.clips.find(c => c.id === clipId);
-            if (existingSplitClip) {
+        
+        // Prüfe, ob der Split-Clip bereits existiert
+        const existingSplitClip = track.clips.find(c => c.id === clipId);
+        if (existingSplitClip) {
+          // Aktualisiere nur die Position des existierenden Split-Clips
+          return prevTracks.map(t => {
+            if (t.id === trackId) {
               return {
                 ...t,
                 clips: t.clips.map(c => 
                   c.id === clipId 
-                    ? { ...c, start: newStart, duration: clipDuration }
+                    ? { ...c, start: newStart, duration: newDuration }
                     : c
                 )
               };
             }
+            return t;
+          });
+        }
 
+        // Erstelle einen neuen Split-Clip
+        return prevTracks.map(t => {
+          if (t.id === trackId) {
             return {
               ...t,
               clips: t.clips
-                .filter(c => c.id !== originalClipId && c.duration > 0)
-                .concat({
+                .filter(c => c.id !== originalClipId && c.duration > 0) // Entferne den ursprünglichen Clip und Clips mit Dauer 0
+                .concat({ // Füge den neuen Clip hinzu
                   id: clipId,
                   name: `Clip ${clipId.includes('-1') ? '1' : '2'}`,
                   start: newStart,
-                  duration: clipDuration,
+                  duration: newDuration,
+                  track: trackId,
                   type: t.type,
                 })
-                .sort((a, b) => a.start - b.start)
+                .sort((a, b) => a.start - b.start) // Sortiere nach Startzeit
             };
           }
           return t;
         });
-      } else {
-        // Normaler Clip-Update oder neuer Clip
-        updatedTracks = prevTracks.map(t => {
-          if (t.id !== trackId) return t;
-          
-          const existingClip = t.clips.find(c => c.id === clipId);
-          if (existingClip) {
-            return {
-              ...t,
-              clips: t.clips.map(clip =>
-                clip.id === clipId
-                  ? { ...clip, start: newStart, duration: clipDuration }
-                  : clip
-              ),
-            };
-          }
-
-          return {
-            ...t,
-            clips: [
-              ...t.clips,
-              {
-                id: clipId,
-                name: `Clip ${t.clips.length + 1}`,
-                start: newStart,
-                duration: clipDuration,
-                type: t.type,
-              },
-            ].sort((a, b) => a.start - b.start),
-          };
-        });
       }
 
-      // Berechne die neue Timeline-Dauer basierend auf allen Clips
-      const newDuration = calculateRequiredDuration(updatedTracks);
-      setTimelineDuration(newDuration);
+      // Normaler Clip-Update oder neuer Clip
+      return prevTracks.map(t => {
+        if (t.id !== trackId) return t;
 
-      return updatedTracks;
+        const existingClip = t.clips.find(c => c.id === clipId);
+        if (existingClip) {
+          return {
+            ...t,
+            clips: t.clips.map(clip =>
+              clip.id === clipId
+                ? { ...clip, start: newStart, duration: newDuration }
+                : clip
+            ),
+          };
+        }
+
+        // Neuer Clip
+        return {
+          ...t,
+          clips: [
+            ...t.clips,
+            {
+              id: clipId,
+              name: `Clip ${t.clips.length + 1}`,
+              start: newStart,
+              duration: newDuration,
+              track: trackId,
+              type: t.type,
+            },
+          ].sort((a, b) => a.start - b.start),
+        };
+      });
     });
   };
 
@@ -168,7 +151,6 @@ export function Editor() {
             onClipChange={handleClipChange}
             onTimelineOffsetChange={setTimelineOffset}
             onZoomChange={setZoom}
-            duration={timelineDuration}
           />
         </ResizablePanel>
       </ResizablePanelGroup>

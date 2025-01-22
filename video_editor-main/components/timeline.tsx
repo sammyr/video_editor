@@ -9,27 +9,18 @@ import { settings } from '@/config/editor-settings';
 
 interface TimelineProps {
   tracks: Track[];
-  onClipSelect: (clipId: string | null) => void;
+  onClipSelect: (clipName: string) => void;
   onClipChange: (trackId: number, clipId: string, newStart: number, newDuration: number) => void;
-  onTimelineOffsetChange?: (offset: number) => void;
+  onTimelineOffsetChange: (offset: number) => void;
   onZoomChange: (zoom: number) => void;
-  duration: number;
 }
 
-export function Timeline({ 
-  tracks, 
-  onClipSelect, 
-  onClipChange, 
-  onTimelineOffsetChange, 
-  onZoomChange, 
-  duration 
-}: TimelineProps) {
+export function Timeline({ tracks, onClipSelect, onClipChange, onTimelineOffsetChange, onZoomChange }: TimelineProps) {
   const [zoom, setZoom] = useState(1);
   const [selectedTool, setSelectedTool] = useState<'select' | 'razor' | 'hand'>('select');
   const [isDraggingTimeline, setIsDraggingTimeline] = useState(false);
-  const [timelineOffset, setTimelineOffset] = useState(0);
   const [startDragX, setStartDragX] = useState(0);
-  const [startOffset, setStartOffset] = useState(0);
+  const [timelineOffset, setTimelineOffset] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -51,16 +42,16 @@ export function Timeline({
     if (selectedTool === 'hand' && e.target === e.currentTarget) {
       setIsDraggingTimeline(true);
       setStartDragX(e.clientX);
-      setStartOffset(timelineOffset);
     }
   };
 
   const handleTimelineMouseMove = (e: React.MouseEvent) => {
     if (isDraggingTimeline && selectedTool === 'hand') {
-      const delta = e.clientX - startDragX;
-      const newOffset = startOffset + delta;
+      const delta = (e.clientX - startDragX) / 2;
+      const newOffset = timelineOffset + delta;
       setTimelineOffset(newOffset);
-      onTimelineOffsetChange?.(newOffset);
+      onTimelineOffsetChange(newOffset);
+      setStartDragX(e.clientX);
     }
   };
 
@@ -167,7 +158,6 @@ export function Timeline({
         zoom={zoom}
         offset={timelineOffset}
         width={timelineWidth}
-        duration={duration}
       />
 
       <div

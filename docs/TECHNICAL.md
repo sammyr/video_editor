@@ -104,169 +104,181 @@ interface Track {
 
 Die Timeline-Komponente ist das Herzstück des Video-Editors und ermöglicht die präzise Bearbeitung von Video- und Audio-Clips.
 
-### Komponenten-Hierarchie
+### Architektur
+
+Die Timeline-Komponente ist hierarchisch aufgebaut:
 
 ```
 Timeline
-├── TimelineTools
-├── TimelineRuler
-└── Track
-    └── TrackClip
+├── TimelineHeader
+│   ├── Zeitlineal
+│   └── Werkzeugleiste
+├── TimelineTracks
+│   ├── Track 1
+│   │   ├── TrackClip 1
+│   │   └── TrackClip 2
+│   └── Track 2
+│       └── TrackClip 3
+└── TimelineControls
+    ├── Zoom
+    └── Snap-Toggle
 ```
 
-### Hauptfunktionen
+### Komponenten im Detail
 
-#### 1. Clip-Management
+#### TrackClip
 
-- **Clip-Positionierung**: 
-  - Präzises Snapping-System für exakte Clip-Platzierung
-  - Automatische Ausrichtung an Timeline-Start und anderen Clips
-  - Verhindert Überlappungen und Lücken zwischen Clips
+Die TrackClip-Komponente ist das Herzstück der Timeline-Bearbeitung:
 
-- **Clip-Splitting**:
-  - Teilt Clips an der Cursor-Position
-  - Generiert neue eindeutige IDs für geteilte Clips
-  - Behält alle Eigenschaften des Original-Clips bei
+##### Eigenschaften
+- `clip`: Clip-Daten (id, name, start, duration, type)
+- `zoom`: Aktueller Zoom-Faktor
+- `snapEnabled`: Aktiviert/Deaktiviert Snapping
+- `selectedTool`: Aktives Werkzeug (select, razor, hand)
 
-#### 2. Snapping-System
+##### Interaktionen
+1. **Drag & Drop**
+   - Verschieben von Clips auf der Timeline
+   - Präzises Snapping an anderen Clips
+   - Überlappungsprüfung
 
-- **Aktivierung/Deaktivierung**:
-  - Toggle-Button in der Toolbar
-  - Tastaturkürzel 'S'
-  - Standard: aktiviert
+2. **Trimming**
+   - Start- und End-Trimming mit Griffen
+   - Minimale Clip-Dauer: 0.1 Sekunden
+   - Snapping während des Trimmens
 
-- **Snap-Verhalten**:
-  - Snap-Schwelle: 10 Pixel (skaliert mit Zoom)
-  - Präzises Einrasten am Timeline-Start (0)
-  - Exaktes Anschließen an andere Clips (Start/Ende)
-  - Verhindert jegliche Überlappungen
+3. **Snapping-System**
+   Priorisierte Snap-Punkte:
+   1. Clip-Grenzen (höchste Priorität)
+      - Start- und Endpunkte anderer Clips
+      - Präzise Ausrichtung ohne Lücken
+   2. Timeline-Anfang
+      - Snap auf Position 0
+   3. Sekundenraster (niedrigste Priorität)
+      - Snap auf ganze Sekunden
+      - Berücksichtigt benachbarte Sekunden
 
-- **Snap-Prioritäten**:
-  1. Clip-Grenzen (Start/Ende anderer Clips)
-  2. Timeline-Anfang (0)
-  3. Sekundenraster
+   Snap-Verhalten:
+   - Snap-Schwelle: 10 Pixel (skaliert mit Zoom)
+   - Wählt nächstgelegenen Punkt mit höchster Priorität
+   - Verhindert Überlappungen und negative Positionen
 
-#### 3. Werkzeuge
+##### Implementierungsdetails
+- Verwendung von React-States für Drag & Drop und Trimming
+- Effiziente Überlappungsprüfung
+- Skalierbare Snap-Logik
+- Pixel-zu-Zeit-Konvertierung basierend auf Zoom
 
-- **Auswahlwerkzeug (V)**:
-  - Clips verschieben
-  - Snapping zu anderen Clips
-  - Überlappungsprüfung
+#### Track
 
-- **Rasierklinge (C)**:
-  - Clips an Cursor-Position teilen
-  - Erzeugt zwei neue Clips
-  - Behält Original-Eigenschaften
+Die Track-Komponente verwaltet eine Reihe von Clips:
 
-- **Hand-Werkzeug (H)**:
-  - Timeline-Navigation
-  - Horizontales Scrollen
+##### Eigenschaften
+- `clips`: Array von Clip-Objekten
+- `selectedClip`: Aktuell ausgewählter Clip
+- `height`: Höhe der Spur
 
-#### 4. Tastaturkürzel
+##### Funktionen
+- Organisation von Clips
+- Clip-Auswahl
+- Visuelles Feedback
 
-- **V**: Auswahlwerkzeug
-- **C**: Rasierklinge
-- **H**: Hand-Werkzeug
-- **S**: Snapping ein/aus
-- **+**: Zoom in
-- **-**: Zoom out
+#### Timeline
 
-### Technische Details
+Die Hauptkomponente koordiniert alle Unterkomponenten:
 
-#### Clip-Struktur
+##### Eigenschaften
+- `tracks`: Array von Track-Objekten
+- `zoom`: Globaler Zoom-Faktor
+- `snapEnabled`: Globale Snap-Einstellung
+- `selectedTool`: Aktives Bearbeitungswerkzeug
+
+##### Funktionen
+- Zentrale Zustandsverwaltung
+- Event-Handling
+- Zoom-Kontrolle
+- Werkzeug-Verwaltung
+
+### Datenstrukturen
+
+#### Clip
 ```typescript
 interface Clip {
-  id: string;
-  name: string;
-  start: number;    // Startzeit in Sekunden
-  duration: number; // Dauer in Sekunden
-  type: 'video' | 'audio';
+  id: string;          // Eindeutige ID
+  name: string;        // Anzeigename
+  start: number;       // Startposition in Sekunden
+  duration: number;    // Dauer in Sekunden
+  type: 'video' | 'audio'; // Clip-Typ
 }
 ```
 
-#### Track-Struktur
+#### Track
 ```typescript
 interface Track {
-  id: number;
-  type: 'video' | 'audio';
-  clips: Clip[];
+  id: string;          // Track-ID
+  clips: Clip[];       // Clips im Track
+  type: 'video' | 'audio'; // Track-Typ
 }
 ```
-
-#### Snapping-Logik
-
-1. **Clip-Bewegung**:
-   ```typescript
-   // Snap-Schwelle berechnen (10 Pixel in Zeit)
-   const snapThreshold = 10 / (pixelsPerSecond * zoom);
-   
-   // Prüfe Timeline-Start
-   if (newStart <= snapThreshold) {
-     newStart = 0;
-   }
-   
-   // Prüfe andere Clips
-   if (nearestClip) {
-     if (Math.abs(clipEnd - nearestClip.start) <= snapThreshold) {
-       // Snap ans Ende
-       newStart = nearestClip.start - clip.duration;
-     } else if (Math.abs(newStart - nearestClip.end) <= snapThreshold) {
-       // Snap an den Start
-       newStart = nearestClip.end;
-     }
-   }
-   ```
-
-2. **Überlappungsprüfung**:
-   ```typescript
-   const hasOverlap = clips.some(otherClip => {
-     if (otherClip.id === clip.id) return false;
-     const clipEnd = newStart + clip.duration;
-     const otherEnd = otherClip.start + otherClip.duration;
-     return (
-       (newStart >= otherClip.start && newStart < otherEnd) ||
-       (clipEnd > otherClip.start && clipEnd <= otherEnd) ||
-       (newStart <= otherClip.start && clipEnd >= otherEnd)
-     );
-   });
-   ```
 
 ### Konfiguration
 
-Die Timeline verwendet die folgenden Standardeinstellungen:
+Die Timeline verwendet folgende Standardeinstellungen:
 
 ```typescript
 const settings = {
   timeline: {
-    pixelsPerSecond: 100,  // Zeitliche Auflösung
-    snapGrid: 1,           // Snapping-Raster in Sekunden
-    minZoom: 0.1,         // Minimaler Zoom-Faktor
-    maxZoom: 5            // Maximaler Zoom-Faktor
+    pixelsPerSecond: 100,  // Basis-Zeitskala
+    snapGrid: 1,           // Sekunden-Raster
+    minZoom: 0.1,         // Minimaler Zoom
+    maxZoom: 10,          // Maximaler Zoom
+    defaultZoom: 1        // Standard-Zoom
   }
 };
 ```
 
-### Leistungsoptimierung
+### Performance-Optimierungen
 
-- Effiziente Überlappungsprüfung
-- Optimierte Snap-Berechnung
-- Vermeidung unnötiger Re-Renders
-- Präzise Clip-Positionierung ohne Toleranzen
+1. **Effiziente Rendering-Updates**
+   - Verwendung von React.memo für TrackClip
+   - Optimierte Zustandsaktualisierungen
+
+2. **Snap-Berechnung**
+   - Caching von Snap-Punkten
+   - Priorisierte Suche
+   - Optimierte Distanzberechnung
+
+3. **Überlappungsprüfung**
+   - Frühe Abbrüche bei Nicht-Überlappung
+   - Effiziente Bereichsprüfung
 
 ### Bekannte Einschränkungen
 
-- Maximale Zoom-Stufe: 5x
-- Minimale Zoom-Stufe: 0.1x
-- Clips müssen eine Mindestdauer > 0 haben
-- Keine vertikale Verschiebung zwischen Tracks
+1. **Zoom-Grenzen**
+   - Minimaler Zoom: 0.1
+   - Maximaler Zoom: 10
 
-### Zukünftige Erweiterungen
+2. **Performance**
+   - Leistungseinbußen bei sehr vielen Clips
+   - Empfohlenes Maximum: 100 Clips pro Track
 
-- Multi-Track-Selection
-- Ripple-Edit-Modus
-- Keyboard-Trimming
-- Clip-Transitions
-- Nested-Sequences
+### Erweiterungsmöglichkeiten
+
+1. **Multi-Track-Selektion**
+   - Gleichzeitiges Verschieben mehrerer Clips
+   - Gruppierte Operationen
+
+2. **Erweiterte Snap-Funktionen**
+   - Snap an Markern
+   - Benutzerdefinierte Snap-Punkte
+
+3. **Transitions**
+   - Übergangseffekte zwischen Clips
+   - Anpassbare Überblendungen
+
+4. **Keyboard-Shortcuts**
+   - Präzises Verschieben mit Pfeiltasten
+   - Schnelles Trimmen mit Tastenkombinationen
 
 ## Zukünftige Erweiterungen
 - [ ] Mehrspuren-Bearbeitung

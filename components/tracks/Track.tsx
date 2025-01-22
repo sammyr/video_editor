@@ -1,54 +1,83 @@
 'use client';
 
-import React, { useState } from 'react';
-import { TrackProps } from '../editor/types';
+import React, { useState, useCallback } from 'react';
+import { Track as TrackType, Clip } from '../editor/types';
 import { TrackClip } from './TrackClip';
 import { settings } from '@/config/editor-settings';
 
-interface TrackComponentProps extends TrackProps {
+interface TrackProps {
+  track: TrackType;
   zoom: number;
-  onClipSelect?: (clipName: string) => void;
-  onClipChange?: (clipId: string, newStart: number, newDuration: number) => void;
-  onClipSplit?: (clipId: string, splitPoint: number) => void;
   selectedTool?: 'select' | 'razor' | 'hand';
   snapEnabled?: boolean;
-  allTracks?: TrackProps[]; // Alle Tracks für Clip-Snapping
+  onClipSelect?: (clipId: string | null) => void;
+  onClipChange?: (clipId: string, newStart: number, newDuration: number) => void;
+  onClipSplit?: (clipId: string, splitPoint: number) => void;
 }
 
 export function Track({ 
   track, 
-  zoom, 
-  onClipSelect, 
-  onClipChange, 
-  onClipSplit, 
-  selectedTool,
-  snapEnabled,
-  allTracks = []
-}: TrackComponentProps) {
+  zoom,
+  selectedTool = 'select',
+  snapEnabled = true,
+  onClipSelect,
+  onClipChange,
+  onClipSplit
+}: TrackProps) {
   const [isDragOver, setIsDragOver] = useState(false);
 
-  // Prüft, ob ein Clip an der angegebenen Position eine Überlappung verursachen würde
-  const checkOverlap = (clipId: string, newStart: number, duration: number): boolean => {
-    return track.clips.some(existingClip => {
-      if (existingClip.id === clipId) return false;
-      
-      const clipEnd = newStart + duration;
-      const existingEnd = existingClip.start + existingClip.duration;
+  const findNearestSnapPoint = useCallback((position: number, duration: number): number => {
+    if (!snapEnabled) return position;
+
+    // Snap-Schwelle in Sekunden (10 Pixel)
+    const snapThreshold = 10 / (settings.timeline.pixelsPerSecond * zoom);
+    let nearestPoint = position;
+    let minDistance = snapThreshold;
+
+    // Timeline-Start
+    if (Math.abs(position) < snapThreshold) {
+      return 0;
+    }
+
+    // Andere Clips
+    track.clips.forEach(otherClip => {
+      // Snap zum Start des anderen Clips
+      const startDistance = Math.abs(position - otherClip.start);
+      if (startDistance < minDistance) {
+        minDistance = startDistance;
+        nearestPoint = otherClip.start;
+      }
+
+      // Snap zum Ende des anderen Clips
+      const endDistance = Math.abs(position - (otherClip.start + otherClip.duration));
+      if (endDistance < minDistance) {
+        minDistance = endDistance;
+        nearestPoint = otherClip.start + otherClip.duration;
+      }
+
+      // Snap zum Ende unseres Clips an den Start des anderen Clips
+      const ourEndToTheirStart = Math.abs((position + duration) - otherClip.start);
+      if (ourEndToTheirStart < minDistance) {
+        minDistance = ourEndToTheirStart;
+        nearestPoint = otherClip.start - duration;
+      }
+    });
+
+    return nearestPoint;
+  }, [snapEnabled, zoom, track.clips]);
+
+  const checkOverlap = useCallback((start: number, duration: number): boolean => {
+    return track.clips.some(clip => {
+      const clipEnd = start + duration;
+      const existingClipEnd = clip.start + clip.duration;
       
       return (
-        (newStart >= existingClip.start && newStart < existingEnd) ||
-        (clipEnd > existingClip.start && clipEnd <= existingEnd) ||
-        (newStart <= existingClip.start && clipEnd >= existingEnd)
+        (start >= clip.start && start < existingClipEnd) ||
+        (clipEnd > clip.start && clipEnd <= existingClipEnd) ||
+        (start <= clip.start && clipEnd >= existingClipEnd)
       );
     });
-  };
-
-  // Behandelt Änderungen an Clips mit Überlappungsprüfung
-  const handleClipChange = (clipId: string, newStart: number, duration: number) => {
-    if (!checkOverlap(clipId, newStart, duration)) {
-      onClipChange?.(clipId, newStart, duration);
-    }
-  };
+  }, [track.clips]);
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -78,24 +107,60 @@ export function Track({
     
     try {
       const data = e.dataTransfer.getData('application/json');
-      if (data) {
-        const mediaItem = JSON.parse(data);
-        if (track.type === mediaItem.type) {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const mouseX = e.clientX - rect.left;
-          const timePosition = mouseX / (settings.timeline.pixelsPerSecond * zoom);
-          const snappedTime = Math.round(timePosition * settings.timeline.snapGrid) / settings.timeline.snapGrid;
+      if (!data) {
+        console.log('Keine Daten im Drop-Event gefunden');
+        return;
+      }
 
-          const duration = typeof mediaItem.duration === 'string'
-            ? parseFloat(mediaItem.duration.split(':').reduce((acc: number, time: string) => (60 * acc) + parseFloat(time), 0))
-            : (typeof mediaItem.duration === 'number' ? mediaItem.duration : 30);
+      const mediaItem = JSON.parse(data);
+      if (track.type !== mediaItem.type) {
+        console.log('Track-Typ stimmt nicht überein:', track.type, mediaItem.type);
+        return;
+      }
 
-          // Prüfe auf Überlappungen beim Hinzufügen neuer Clips
-          const clipId = `clip-${Date.now()}`;
-          if (!checkOverlap(clipId, Math.max(0, snappedTime), duration)) {
-            onClipChange?.(clipId, Math.max(0, snappedTime), duration);
-          }
+      // Berechne die Position relativ zum Track-Content
+      const rect = e.currentTarget.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const timePosition = (mouseX - settings.tracks.headerWidth) / (settings.timeline.pixelsPerSecond * zoom);
+      
+      // Berechne die Dauer
+      let duration = 0;
+      if (typeof mediaItem.duration === 'string') {
+        // Format: "MM:SS" oder "HH:MM:SS"
+        const parts = mediaItem.duration.split(':');
+        if (parts.length === 2) {
+          // MM:SS Format
+          duration = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+        } else if (parts.length === 3) {
+          // HH:MM:SS Format
+          duration = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
         }
+      } else if (typeof mediaItem.duration === 'number') {
+        duration = mediaItem.duration;
+      }
+
+      if (duration <= 0) {
+        console.error('Ungültige Clip-Dauer:', duration);
+        return;
+      }
+
+      // Finde den nächsten Snap-Punkt
+      const basePosition = Math.max(0, timePosition);
+      const snappedPosition = findNearestSnapPoint(basePosition, duration);
+
+      // Generiere eine eindeutige ID für den neuen Clip
+      const clipId = mediaItem.id || `clip-${Date.now()}`;
+
+      // Prüfe auf Überlappungen
+      if (!checkOverlap(snappedPosition, duration)) {
+        console.log('Füge Clip hinzu:', {
+          clipId,
+          start: snappedPosition,
+          duration
+        });
+        onClipChange?.(clipId, snappedPosition, duration);
+      } else {
+        console.log('Überlappung erkannt - Clip kann nicht platziert werden');
       }
     } catch (error) {
       console.error('Fehler beim Drop:', error);
@@ -103,23 +168,9 @@ export function Track({
   };
 
   return (
-    <div
-      className={`relative h-24 border-b border-[#1a1a1a] transition-colors ${
-        isDragOver
-          ? track.type === 'video'
-            ? 'bg-blue-500/10'
-            : 'bg-green-500/10'
-          : 'bg-[#2b2b2b]'
-      }`}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDragExit={handleDragLeave}
-      onDrop={handleDrop}
-      style={{
-        cursor: selectedTool === 'razor' ? 'crosshair' : 'default'
-      }}
-    >
-      <div className="absolute left-0 top-0 w-24 h-full bg-[#323232] border-r border-[#1a1a1a] flex flex-col justify-center px-2">
+    <div className="flex h-24">
+      {/* Track-Header */}
+      <div className="w-24 h-full bg-[#323232] border-r border-[#1a1a1a] flex flex-col justify-center px-2">
         <span className="text-xs font-medium text-[#888]">
           {track.type === 'video' ? `Video ${track.id + 1}` : `Audio ${track.id - 2}`}
         </span>
@@ -131,7 +182,18 @@ export function Track({
         </div>
       </div>
 
-      <div className="absolute left-24 right-0 h-full">
+      {/* Track-Content */}
+      <div 
+        className={`relative flex-1 h-full border-b border-[#1a1a1a] ${
+          isDragOver ? 'bg-blue-500/10' : 'bg-[#2b2b2b]'
+        } ${track.type === 'video' ? 'bg-blue-950/20' : 'bg-green-950/20'}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        style={{
+          cursor: selectedTool === 'razor' ? 'crosshair' : 'default'
+        }}
+      >
         {track.clips.map((clip) => (
           <TrackClip
             key={clip.id}
@@ -139,14 +201,12 @@ export function Track({
             zoom={zoom}
             selectedTool={selectedTool}
             snapEnabled={snapEnabled}
-            allClips={track.clips}
             onSelect={onClipSelect}
             onClipChange={(clipId, newStart, newDuration) =>
-              handleClipChange(clipId, newStart, newDuration)
+              onClipChange?.(clipId, newStart, newDuration)
             }
-            onClipSplit={(clipId, splitPoint) =>
-              onClipSplit?.(clipId, splitPoint)
-            }
+            onClipSplit={onClipSplit}
+            allClips={track.clips}
           />
         ))}
       </div>

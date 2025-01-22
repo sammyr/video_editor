@@ -7,50 +7,99 @@ interface TimelineRulerProps {
   zoom: number;
   offset: number;
   width: number;
+  duration: number;
 }
 
-export function TimelineRuler({ zoom, offset, width }: TimelineRulerProps) {
+export function TimelineRuler({ zoom, offset, width, duration }: TimelineRulerProps) {
   const pixelsPerSecond = settings.timeline.pixelsPerSecond * zoom;
-  const totalSeconds = Math.ceil(width / pixelsPerSecond);
+  const totalWidth = duration * pixelsPerSecond;
   
-  // Generiere Markierungen für jede Sekunde
-  const markers = Array.from({ length: totalSeconds }, (_, i) => {
-    const x = i * pixelsPerSecond + offset;
-    const minutes = Math.floor(i / 60);
-    const seconds = i % 60;
+  const getMarkerInterval = () => {
+    if (zoom < 0.05) return 300; // 5 Minuten
+    if (zoom < 0.1) return 120;  // 2 Minuten
+    if (zoom < 0.3) return 60;   // 1 Minute
+    if (zoom < 0.6) return 30;   // 30 Sekunden
+    if (zoom < 1.0) return 15;   // 15 Sekunden
+    return 5;                    // 5 Sekunden
+  };
+
+  const getSubMarkerCount = () => {
+    if (zoom < 0.05) return 5;  // Alle 1 Minute
+    if (zoom < 0.1) return 4;   // Alle 30 Sekunden
+    if (zoom < 0.3) return 3;   // Alle 20 Sekunden
+    if (zoom < 0.6) return 2;   // Alle 15 Sekunden
+    return 5;                   // Alle 1 Sekunde
+  };
+
+  const interval = getMarkerInterval();
+  const subMarkerCount = getSubMarkerCount();
+  const markers = [];
+  
+  for (let time = 0; time <= duration; time += interval) {
+    const position = time * pixelsPerSecond;
     
-    // Große Markierung alle 10 Sekunden
-    const isMajor = i % 10 === 0;
-    // Mittlere Markierung alle 5 Sekunden
-    const isMedium = i % 5 === 0;
+    // Hauptmarkierung
+    const hours = Math.floor(time / 3600);
+    const minutes = Math.floor((time % 3600) / 60);
+    const seconds = Math.floor(time % 60);
     
-    return (
+    let timeText;
+    if (hours > 0) {
+      timeText = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    } else {
+      timeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+    
+    markers.push(
       <div
-        key={i}
-        className="absolute"
-        style={{ left: `${x}px` }}
+        key={time}
+        className="absolute flex flex-col items-center"
+        style={{
+          left: `${position}px`,
+          transform: 'translateX(-50%)',
+          color: '#fff',
+        }}
       >
-        <div
-          className={`${
-            isMajor
-              ? 'h-4 border-l border-white/40'
-              : isMedium
-              ? 'h-3 border-l border-white/30'
-              : 'h-2 border-l border-white/20'
-          }`}
-        />
-        {isMajor && (
-          <div className="text-[10px] text-white/60 -ml-4 mt-1">
-            {minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}
-          </div>
-        )}
+        <div className="h-3 w-[1px] bg-gray-400" />
+        <div className="text-[10px] text-gray-300 mt-0.5 whitespace-nowrap">
+          {timeText}
+        </div>
       </div>
     );
-  });
+    
+    // Zwischenmarkierungen
+    const subInterval = interval / subMarkerCount;
+    for (let i = 1; i < subMarkerCount; i++) {
+      const subTime = time + (i * subInterval);
+      if (subTime < duration) {
+        const subPosition = subTime * pixelsPerSecond;
+        markers.push(
+          <div
+            key={`sub-${subTime}`}
+            className="absolute"
+            style={{
+              left: `${subPosition}px`,
+              transform: 'translateX(-50%)',
+            }}
+          >
+            <div className="h-2 w-[1px] bg-gray-600" />
+          </div>
+        );
+      }
+    }
+  }
 
   return (
-    <div className="h-8 bg-[#2a2a2a] border-b border-[#1a1a1a] relative">
-      {markers}
+    <div className="h-8 relative border-b border-gray-700 bg-[#1a1a1a]">
+      <div
+        className="absolute top-0 left-0 h-full"
+        style={{
+          width: `${totalWidth}px`,
+          transform: `translateX(${offset}px)`,
+        }}
+      >
+        {markers}
+      </div>
     </div>
   );
 }

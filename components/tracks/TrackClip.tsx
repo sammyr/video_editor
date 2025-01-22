@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Clip } from '../editor/types';
 import { settings } from '@/config/editor-settings';
 
 interface TrackClipProps {
   clip: Clip;
   zoom: number;
-  onSelect?: (clipName: string) => void;
+  onSelect?: (clipId: string | null) => void;
   onClipChange?: (clipId: string, newStart: number, newDuration: number) => void;
   onClipSplit?: (clipId: string, splitPoint: number) => void;
   selectedTool?: 'select' | 'razor' | 'hand';
@@ -30,172 +30,88 @@ export function TrackClip({
   const [dragStartX, setDragStartX] = useState(0);
   const [originalStart, setOriginalStart] = useState(0);
   const [originalDuration, setOriginalDuration] = useState(0);
-  const [isHovering, setIsHovering] = useState(false);
-
-  // Minimale Clip-Dauer in Sekunden
-  const MIN_DURATION = 0.1;
+  const lastValidPosition = useRef(clip.start);
 
   // Findet den nächsten Snap-Punkt für eine gegebene Position
-  const findNearestSnapPoint = (position: number, isEndPoint: boolean = false): number => {
+  const findNearestSnapPoint = useCallback((position: number, duration: number): number => {
     if (!snapEnabled) return position;
 
     // Snap-Schwelle in Sekunden (10 Pixel)
     const snapThreshold = 10 / (settings.timeline.pixelsPerSecond * zoom);
-
-    // Sammle alle möglichen Snap-Punkte
-    let snapPoints: { position: number; priority: number }[] = [];
-
-    // Clip-Snap-Punkte (höchste Priorität)
-    allClips
-      .filter(c => c.id !== clip.id)
-      .forEach(c => {
-        snapPoints.push({ position: c.start, priority: 1 }); // Start des Clips
-        snapPoints.push({ position: c.start + c.duration, priority: 1 }); // Ende des Clips
-      });
-
-    // Timeline-Start (zweithöchste Priorität)
-    snapPoints.push({ position: 0, priority: 2 });
-
-    // Sekundenraster (niedrigste Priorität)
-    const currentSecond = Math.round(position);
-    const nearbySeconds = [-1, 0, 1]; // Prüfe auch benachbarte Sekunden
-    nearbySeconds.forEach(offset => {
-      const secondPosition = currentSecond + offset;
-      if (secondPosition >= 0) {
-        snapPoints.push({ position: secondPosition, priority: 3 });
-      }
-    });
-
-    // Finde den nächstgelegenen Snap-Punkt
     let nearestPoint = position;
     let minDistance = snapThreshold;
-    let highestPriority = Infinity;
 
-    snapPoints.forEach(point => {
-      const distance = Math.abs(position - point.position);
-      if (distance <= snapThreshold) {
-        // Wenn der Punkt näher ist oder die gleiche Distanz hat aber höhere Priorität
-        if (distance < minDistance || (distance === minDistance && point.priority < highestPriority)) {
-          minDistance = distance;
-          nearestPoint = point.position;
-          highestPriority = point.priority;
+    // Timeline-Start
+    if (Math.abs(position) < snapThreshold) {
+      return 0;
+    }
+
+    // Andere Clips
+    allClips
+      .filter(c => c.id !== clip.id)
+      .forEach(otherClip => {
+        // Snap zum Start des anderen Clips
+        const startDistance = Math.abs(position - otherClip.start);
+        if (startDistance < minDistance) {
+          minDistance = startDistance;
+          nearestPoint = otherClip.start;
         }
-      }
-    });
+
+        // Snap zum Ende des anderen Clips
+        const endDistance = Math.abs(position - (otherClip.start + otherClip.duration));
+        if (endDistance < minDistance) {
+          minDistance = endDistance;
+          nearestPoint = otherClip.start + otherClip.duration;
+        }
+
+        // Snap zum Ende unseres Clips an den Start des anderen Clips
+        const ourEndToTheirStart = Math.abs((position + duration) - otherClip.start);
+        if (ourEndToTheirStart < minDistance) {
+          minDistance = ourEndToTheirStart;
+          nearestPoint = otherClip.start - duration;
+        }
+      });
 
     return nearestPoint;
-  };
+  }, [snapEnabled, zoom, clip.id, allClips]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (selectedTool === 'razor') {
       const rect = e.currentTarget.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
-      const splitPoint = mouseX / (settings.timeline.pixelsPerSecond * zoom);
-      onClipSplit?.(clip.id, clip.start + splitPoint);
+      const clipTime = mouseX / (settings.timeline.pixelsPerSecond * zoom);
+      onClipSplit?.(clip.id, clip.start + clipTime);
       return;
     }
 
-    if (selectedTool === 'select') {
-      // Prüfe, ob wir auf einen der Trim-Griffe geklickt haben
-      const rect = e.currentTarget.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const isLeftHandle = clickX <= 6; // 6px = Breite des Trim-Griffs (1.5rem)
-      const isRightHandle = clickX >= rect.width - 6;
+    if (selectedTool !== 'select') return;
+    if (e.button !== 0) return; // Nur linke Maustaste
 
-      if (!isLeftHandle && !isRightHandle) {
-        // Nur Drag & Drop starten, wenn wir nicht auf einen Trim-Griff geklickt haben
-        e.stopPropagation();
-        setIsDragging(true);
-        setDragStartX(e.clientX);
-        setOriginalStart(clip.start);
-        setOriginalDuration(clip.duration);
-        onSelect?.(clip.name);
-      }
-    }
-  };
+    e.preventDefault();
+    e.stopPropagation();
 
-  const handleTrimStart = (e: React.MouseEvent) => {
-    if (selectedTool === 'select') {
-      e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    
+    // Prüfe ob wir auf einen der Trim-Griffe geklickt haben
+    const isLeftHandle = clickX <= 6;
+    const isRightHandle = clickX >= rect.width - 6;
+
+    if (isLeftHandle) {
       setIsTrimming('start');
-      setDragStartX(e.clientX);
-      setOriginalStart(clip.start);
-      setOriginalDuration(clip.duration);
-    }
-  };
-
-  const handleTrimEnd = (e: React.MouseEvent) => {
-    if (selectedTool === 'select') {
-      e.stopPropagation();
+    } else if (isRightHandle) {
       setIsTrimming('end');
-      setDragStartX(e.clientX);
-      setOriginalStart(clip.start);
-      setOriginalDuration(clip.duration);
+    } else {
+      setIsDragging(true);
     }
+
+    setDragStartX(e.clientX);
+    setOriginalStart(clip.start);
+    setOriginalDuration(clip.duration);
+    onSelect?.(clip.id);
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if ((isDragging || isTrimming) && selectedTool === 'select') {
-      e.stopPropagation();
-      const deltaX = e.clientX - dragStartX;
-      const deltaTime = deltaX / (settings.timeline.pixelsPerSecond * zoom);
-
-      if (isTrimming === 'start') {
-        // Trimmen vom Start
-        const maxDeltaTime = originalDuration - MIN_DURATION;
-        const clampedDeltaTime = Math.min(maxDeltaTime, Math.max(-originalStart, deltaTime));
-        let newStart = originalStart + clampedDeltaTime;
-        
-        // Snap beim Trimmen vom Start
-        newStart = findNearestSnapPoint(newStart, true);
-        const newDuration = originalDuration - (newStart - originalStart);
-
-        if (newDuration >= MIN_DURATION && !wouldOverlap(newStart, newDuration)) {
-          onClipChange?.(clip.id, newStart, newDuration);
-        }
-      } else if (isTrimming === 'end') {
-        // Trimmen vom Ende
-        let newEnd = originalStart + originalDuration + deltaTime;
-        
-        // Snap beim Trimmen vom Ende
-        newEnd = findNearestSnapPoint(newEnd, true);
-        const newDuration = newEnd - originalStart;
-
-        if (newDuration >= MIN_DURATION && !wouldOverlap(clip.start, newDuration)) {
-          onClipChange?.(clip.id, clip.start, newDuration);
-        }
-      } else if (isDragging) {
-        // Normales Verschieben
-        let newStart = Math.max(0, originalStart + deltaTime);
-        
-        // Snap beim Verschieben
-        newStart = findNearestSnapPoint(newStart);
-        
-        // Zusätzlich auf das Ende prüfen für besseres Snapping
-        const newEnd = newStart + clip.duration;
-        const snappedEnd = findNearestSnapPoint(newEnd, true);
-        
-        // Wenn das Ende näher an einem Snap-Punkt ist, von dort aus zurückrechnen
-        const endDelta = Math.abs(newEnd - snappedEnd);
-        const startDelta = Math.abs(newStart - findNearestSnapPoint(newStart));
-        
-        if (endDelta < startDelta) {
-          newStart = snappedEnd - clip.duration;
-        }
-
-        if (!wouldOverlap(newStart)) {
-          onClipChange?.(clip.id, newStart, clip.duration);
-        }
-      }
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-    setIsTrimming(null);
-  };
-
-  const wouldOverlap = (newStart: number, newDuration: number = clip.duration): boolean => {
+  const checkOverlap = useCallback((newStart: number, newDuration: number): boolean => {
     return allClips.some(otherClip => {
       if (otherClip.id === clip.id) return false;
       
@@ -208,18 +124,84 @@ export function TrackClip({
         (newStart <= otherClip.start && clipEnd >= otherEnd)
       );
     });
-  };
+  }, [clip.id, allClips]);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging && !isTrimming) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const deltaX = e.clientX - dragStartX;
+    const deltaTime = deltaX / (settings.timeline.pixelsPerSecond * zoom);
+
+    if (isTrimming === 'start') {
+      // Trimmen vom Start
+      const maxDeltaTime = originalDuration - settings.clips.minDuration;
+      const clampedDeltaTime = Math.min(maxDeltaTime, Math.max(-originalStart, deltaTime));
+      const newStart = Math.max(0, originalStart + clampedDeltaTime);
+      const newDuration = originalDuration - (newStart - originalStart);
+
+      if (newDuration >= settings.clips.minDuration) {
+        const snappedStart = findNearestSnapPoint(newStart, newDuration);
+        if (!checkOverlap(snappedStart, newDuration)) {
+          onClipChange?.(clip.id, snappedStart, newDuration);
+          lastValidPosition.current = snappedStart;
+        }
+      }
+    } else if (isTrimming === 'end') {
+      // Trimmen vom Ende
+      const newDuration = Math.max(
+        settings.clips.minDuration,
+        originalDuration + deltaTime
+      );
+
+      if (!checkOverlap(clip.start, newDuration)) {
+        onClipChange?.(clip.id, clip.start, newDuration);
+      }
+    } else if (isDragging) {
+      // Normales Verschieben
+      const newStart = Math.max(0, originalStart + deltaTime);
+      const snappedStart = findNearestSnapPoint(newStart, clip.duration);
+      
+      // Prüfe auf Überlappungen
+      if (!checkOverlap(snappedStart, clip.duration)) {
+        onClipChange?.(clip.id, snappedStart, clip.duration);
+        lastValidPosition.current = snappedStart;
+      }
+    }
+  }, [
+    isDragging,
+    isTrimming,
+    dragStartX,
+    originalStart,
+    originalDuration,
+    zoom,
+    clip,
+    onClipChange,
+    snapEnabled,
+    findNearestSnapPoint,
+    checkOverlap
+  ]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    setIsTrimming(null);
+  }, []);
 
   useEffect(() => {
     if (isDragging || isTrimming) {
-      window.addEventListener('mousemove', handleMouseMove as any);
+      window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
       return () => {
-        window.removeEventListener('mousemove', handleMouseMove as any);
+        window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [isDragging, isTrimming]);
+  }, [isDragging, isTrimming, handleMouseMove, handleMouseUp]);
+
+  // Berechne die aktuelle Position basierend auf dem Zustand
+  const currentPosition = clip.start;
 
   return (
     <div
@@ -229,19 +211,17 @@ export function TrackClip({
         selectedTool === 'razor' ? 'cursor-crosshair' : 'cursor-move'
       } group`}
       style={{
-        left: `${clip.start * settings.timeline.pixelsPerSecond * zoom}px`,
+        left: `${(currentPosition * settings.timeline.pixelsPerSecond * zoom) + settings.tracks.headerWidth}px`,
         width: `${clip.duration * settings.timeline.pixelsPerSecond * zoom}px`,
+        transition: isDragging || isTrimming ? 'none' : 'left 0.1s ease-out'
       }}
       onMouseDown={handleMouseDown}
-      onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
     >
       {/* Trim-Griff links */}
       <div
         className={`absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize 
           ${selectedTool === 'select' ? 'group-hover:bg-white/20' : ''} 
           ${isTrimming === 'start' ? 'bg-white/40' : ''}`}
-        onMouseDown={handleTrimStart}
       />
 
       {/* Clip-Inhalt */}
@@ -261,7 +241,6 @@ export function TrackClip({
         className={`absolute right-0 top-0 bottom-0 w-1.5 cursor-ew-resize
           ${selectedTool === 'select' ? 'group-hover:bg-white/20' : ''} 
           ${isTrimming === 'end' ? 'bg-white/40' : ''}`}
-        onMouseDown={handleTrimEnd}
       />
     </div>
   );

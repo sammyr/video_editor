@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 255, 255, 255;
+  --background-rgb: 35, 35, 35;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: rgb(var(--background-rgb));
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 13.7%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 15.7%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 13.7%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 17.5%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 17.5%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 17.5%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 20%;
+    --input: 0 0% 17.5%;
+    --ring: 0 0% 83.1%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+.timeline-track {
+  @apply h-16 border-b border-border relative;
+}
+
+.timeline-clip {
+  @apply absolute h-full bg-secondary rounded-sm cursor-move;
+}
+
+.playhead {
+  @apply absolute w-0.5 h-full bg-primary z-10;
+}
+
+.resizer {
+  @apply w-1 h-full absolute top-0 bg-transparent hover:bg-primary/50 cursor-col-resize;
+}
+
+.resizer-horizontal {
+  @apply h-1 w-full absolute left-0 bg-transparent hover:bg-primary/50 cursor-row-resize;
+}

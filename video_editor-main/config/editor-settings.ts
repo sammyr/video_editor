@@ -3,8 +3,6 @@
  * Diese Datei enthält alle konfigurierbaren Einstellungen für den Video-Editor
  */
 
-'use client';
-
 export interface EditorSettings {
   timeline: {
     /** Minimaler Zoom-Wert */
@@ -23,8 +21,6 @@ export interface EditorSettings {
     markerIntervalSmall: number;
     /** Schwellenwert für kleinen Zoom */
     smallZoomThreshold: number;
-    /** Standard-Dauer der Timeline in Sekunden */
-    defaultDuration: number;
   };
   tracks: {
     /** Höhe einer Spur in Pixeln */
@@ -46,11 +42,10 @@ const defaultSettings: EditorSettings = {
     maxZoom: 2.0,
     zoomStep: 0.1,
     pixelsPerSecond: 100,
-    snapGrid: 1, // Auf 1 Sekunde setzen für präziseres Snapping
+    snapGrid: 2,
     markerInterval: 100,
     markerIntervalSmall: 200,
     smallZoomThreshold: 0.3,
-    defaultDuration: 3600, // 60 Minuten in Sekunden
   },
   tracks: {
     height: 96, // 24px * 4
@@ -63,10 +58,6 @@ const defaultSettings: EditorSettings = {
 };
 
 export function loadSettings(): EditorSettings {
-  if (typeof window === 'undefined') {
-    return defaultSettings;
-  }
-
   try {
     const savedSettings = localStorage.getItem('editorSettings');
     if (savedSettings) {
@@ -75,15 +66,10 @@ export function loadSettings(): EditorSettings {
   } catch (error) {
     console.error('Fehler beim Laden der Einstellungen:', error);
   }
-  
   return defaultSettings;
 }
 
-export function saveSettings(settings: Partial<EditorSettings>): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
+export function saveSettings(settings: Partial<EditorSettings>) {
   try {
     const currentSettings = loadSettings();
     const newSettings = { ...currentSettings, ...settings };
@@ -93,5 +79,4 @@ export function saveSettings(settings: Partial<EditorSettings>): void {
   }
 }
 
-// Exportiere die aktuellen Einstellungen
 export const settings = loadSettings();
