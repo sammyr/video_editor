@@ -31,7 +31,7 @@ export function TimelineTools({
   };
 
   return (
-    <div className="h-12 bg-[#2a2a2a] border-b border-[#1a1a1a] flex items-center px-4 gap-4">
+    <div className="flex items-center w-full gap-4">
       {/* Werkzeuge */}
       <div className="flex items-center gap-2">
         <button
@@ -85,7 +85,7 @@ export function TimelineTools({
       </div>
 
       {/* Aktuelle Zeit */}
-      <div className="bg-[#1e1e1e] px-3 py-1 rounded font-mono text-sm">
+      <div className="bg-[#1e1e1e] px-3 py-1 rounded font-mono text-sm min-w-[100px] text-center">
         {formatTime(currentTime)}
       </div>
 
@@ -97,31 +97,28 @@ export function TimelineTools({
           title="Verkleinern (-)"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/>
-            <path d="M21 21l-4.3-4.3"/>
-            <path d="M8 11h6"/>
+            <path d="M5 12h14"/>
           </svg>
         </button>
-        
-        <Slider
-          value={[zoom]}
-          min={0.1}
-          max={5}
-          step={0.1}
-          onValueChange={([value]) => onZoomChange(value)}
-          className="w-32"
-        />
-        
+
+        <div className="w-32">
+          <Slider
+            value={[zoom]}
+            min={0.1}
+            max={5}
+            step={0.1}
+            onValueChange={([value]) => onZoomChange(value)}
+          />
+        </div>
+
         <button
           className="p-2 rounded-lg hover:bg-white/5"
           onClick={() => onZoomChange(Math.min(5, zoom * 1.2))}
           title="Vergrößern (+)"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/>
-            <path d="M21 21l-4.3-4.3"/>
-            <path d="M11 8v6"/>
-            <path d="M8 11h6"/>
+            <path d="M12 5v14"/>
+            <path d="M5 12h14"/>
           </svg>
         </button>
       </div>

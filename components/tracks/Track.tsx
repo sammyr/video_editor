@@ -26,6 +26,17 @@ export function Track({
 }: TrackProps) {
   const [isDragOver, setIsDragOver] = useState(false);
 
+  // Helper-Funktion für Debug-Logs
+  const debugLog = (type: string, message: string, data: any, color: string = 'White') => {
+    try {
+      // Erstelle eine einzige PowerShell-Instanz für den Debug-Output
+      const cmd = `Write-Host "[TRACK][${type}] ${message} | " -NoNewline; Write-Host '${JSON.stringify(data)}' -ForegroundColor ${color}`;
+      console.log(`[TRACK][${type}]`, message, data);
+    } catch (error) {
+      console.error('Debug Log Fehler:', error);
+    }
+  };
+
   const findNearestSnapPoint = useCallback((position: number, duration: number): number => {
     if (!snapEnabled) return position;
 
@@ -84,13 +95,34 @@ export function Track({
     e.stopPropagation();
     
     try {
-      const data = e.dataTransfer.types.includes('application/json');
-      if (data) {
-        e.dataTransfer.dropEffect = 'copy';
-        setIsDragOver(true);
+      // Prüfe den Clip-Typ aus den Drag-Daten
+      const rawData = e.dataTransfer.getData('application/json');
+      if (rawData) {
+        const dragData = JSON.parse(rawData);
+        debugLog('DragOver', 'Clip über Track', {
+          trackId: track.id,
+          trackType: track.type,
+          clipId: dragData.id,
+          clipType: dragData.type,
+          clipDuration: dragData.duration,
+          mousePosition: {
+            x: e.clientX,
+            y: e.clientY
+          }
+        }, 'Yellow');
+
+        if (dragData.type === track.type) {
+          e.dataTransfer.dropEffect = 'copy';
+          setIsDragOver(true);
+        } else {
+          e.dataTransfer.dropEffect = 'none';
+          setIsDragOver(false);
+        }
       }
     } catch (error) {
-      console.error('Fehler beim Drag Over:', error);
+      debugLog('Error', 'Drag Over Fehler', error, 'Red');
+      e.dataTransfer.dropEffect = 'none';
+      setIsDragOver(false);
     }
   };
 
@@ -108,69 +140,99 @@ export function Track({
     try {
       const data = e.dataTransfer.getData('application/json');
       if (!data) {
-        console.log('Keine Daten im Drop-Event gefunden');
+        debugLog('Error', 'Drop Fehler', 'Keine Daten im Drop-Event gefunden', 'Red');
         return;
       }
 
-      const mediaItem = JSON.parse(data);
-      if (track.type !== mediaItem.type) {
-        console.log('Track-Typ stimmt nicht überein:', track.type, mediaItem.type);
+      const clipData = JSON.parse(data);
+      if (track.type !== clipData.type) {
+        debugLog('Error', 'Drop Fehler', `Track-Typ stimmt nicht überein: ${track.type} != ${clipData.type}`, 'Red');
         return;
       }
 
       // Berechne die Position relativ zum Track-Content
       const rect = e.currentTarget.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
-      const timePosition = (mouseX - settings.tracks.headerWidth) / (settings.timeline.pixelsPerSecond * zoom);
-      
-      // Berechne die Dauer
-      let duration = 0;
-      if (typeof mediaItem.duration === 'string') {
-        // Format: "MM:SS" oder "HH:MM:SS"
-        const parts = mediaItem.duration.split(':');
-        if (parts.length === 2) {
-          // MM:SS Format
-          duration = parseInt(parts[0]) * 60 + parseInt(parts[1]);
-        } else if (parts.length === 3) {
-          // HH:MM:SS Format
-          duration = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+      const trackStartX = settings.tracks.headerWidth;
+      const relativeX = Math.max(0, mouseX - trackStartX);
+      const timePosition = relativeX / (settings.timeline.pixelsPerSecond * zoom);
+
+      // Debug-Ausgabe für die Position
+      debugLog('Position', 'Drop Position', {
+        trackId: track.id,
+        clipId: clipData.id,
+        mouse: {
+          absolute: e.clientX,
+          relative: mouseX,
+          trackRelative: relativeX
+        },
+        time: {
+          position: timePosition,
+          zoom
+        },
+        trackInfo: {
+          headerWidth: settings.tracks.headerWidth,
+          pixelsPerSecond: settings.timeline.pixelsPerSecond
         }
-      } else if (typeof mediaItem.duration === 'number') {
-        duration = mediaItem.duration;
-      }
+      }, 'Cyan');
+
+      // Verwende die Original-Dauer oder die aktuelle Dauer
+      const duration = clipData.duration;
 
       if (duration <= 0) {
-        console.error('Ungültige Clip-Dauer:', duration);
+        debugLog('Error', 'Drop Fehler', `Ungültige Clip-Dauer: ${duration}`, 'Red');
         return;
       }
 
       // Finde den nächsten Snap-Punkt
-      const basePosition = Math.max(0, timePosition);
-      const snappedPosition = findNearestSnapPoint(basePosition, duration);
+      const snappedPosition = findNearestSnapPoint(timePosition, duration);
 
-      // Generiere eine eindeutige ID für den neuen Clip
-      const clipId = mediaItem.id || `clip-${Date.now()}`;
+      // Debug-Ausgabe für den Snap
+      debugLog('Snap', 'Drop Snap Position', {
+        trackId: track.id,
+        clipId: clipData.id,
+        original: timePosition,
+        snapped: snappedPosition,
+        duration,
+        clips: track.clips.map(c => ({
+          id: c.id,
+          start: c.start,
+          duration: c.duration
+        }))
+      }, 'Magenta');
 
       // Prüfe auf Überlappungen
       if (!checkOverlap(snappedPosition, duration)) {
-        console.log('Füge Clip hinzu:', {
-          clipId,
-          start: snappedPosition,
-          duration
-        });
-        onClipChange?.(clipId, snappedPosition, duration);
+        debugLog('Success', 'Drop Erfolgreich', {
+          trackId: track.id,
+          clipId: clipData.id,
+          position: snappedPosition,
+          duration: clipData.duration
+        }, 'Green');
+
+        onClipChange?.(clipData.id, snappedPosition, clipData.duration);
       } else {
-        console.log('Überlappung erkannt - Clip kann nicht platziert werden');
+        debugLog('Warning', 'Drop Überlappung', {
+          trackId: track.id,
+          clipId: clipData.id,
+          position: snappedPosition,
+          duration,
+          existingClips: track.clips.map(c => ({
+            id: c.id,
+            start: c.start,
+            duration: c.duration
+          }))
+        }, 'Red');
       }
     } catch (error) {
-      console.error('Fehler beim Drop:', error);
+      debugLog('Error', 'Drop Fehler', error, 'Red');
     }
   };
 
   return (
     <div className="flex h-24">
       {/* Track-Header */}
-      <div className="w-24 h-full bg-[#323232] border-r border-[#1a1a1a] flex flex-col justify-center px-2">
+      <div className="relative w-24 h-full bg-[#323232] border-r border-[#1a1a1a] flex flex-col justify-center px-2">
         <span className="text-xs font-medium text-[#888]">
           {track.type === 'video' ? `Video ${track.id + 1}` : `Audio ${track.id - 2}`}
         </span>
@@ -180,6 +242,8 @@ export function Track({
             {track.type === 'video' ? 'VID' : 'AUD'}
           </span>
         </div>
+        {/* Vertikale Linie am rechten Rand */}
+        <div className="absolute right-0 top-0 bottom-0 w-px bg-[#1a1a1a]" />
       </div>
 
       {/* Track-Content */}
@@ -194,6 +258,12 @@ export function Track({
           cursor: selectedTool === 'razor' ? 'crosshair' : 'default'
         }}
       >
+        {/* Horizontale Linien für das Raster */}
+        <div className="absolute inset-0">
+          <div className="h-0 border-b border-[#666666] bg-[#1a1a1a]/00" />
+
+        </div>
+
         {track.clips.map((clip) => (
           <TrackClip
             key={clip.id}

@@ -4,10 +4,13 @@
 export interface Clip {
   id: string;
   name: string;
-  start: number;      // Startposition in Sekunden
-  duration: number;   // Dauer in Sekunden
   type: 'video' | 'audio';
+  start: number;       // Position in der Timeline
+  duration: number;    // Dauer in der Timeline
+  originalStart: number;  // Ursprüngliche Startzeit im Quellmaterial
+  originalDuration: number;  // Ursprüngliche Dauer im Quellmaterial
   track?: number;     // Track-ID
+  source?: string;     // Pfad zur Quelldatei
 }
 
 // Track-Typ

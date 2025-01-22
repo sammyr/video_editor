@@ -4,6 +4,16 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Clip } from '../editor/types';
 import { settings } from '@/config/editor-settings';
 
+// Formatiere die Zeit in Sekunden
+const formatSeconds = (seconds: number): string => {
+  if (typeof seconds !== 'number' || isNaN(seconds)) {
+    return '0s';
+  }
+  
+  // Runde auf 2 Dezimalstellen
+  return `${seconds.toFixed(2)}s`;
+};
+
 interface TrackClipProps {
   clip: Clip;
   zoom: number;
@@ -31,6 +41,17 @@ export function TrackClip({
   const [originalStart, setOriginalStart] = useState(0);
   const [originalDuration, setOriginalDuration] = useState(0);
   const lastValidPosition = useRef(clip.start);
+
+  // Helper-Funktion für Debug-Logs
+  const debugLog = (type: string, message: string, data: any, color: string = 'White') => {
+    try {
+      // Erstelle eine einzige PowerShell-Instanz für den Debug-Output
+      const cmd = `Write-Host "[CLIP][${type}] ${message} | " -NoNewline; Write-Host '${JSON.stringify(data)}' -ForegroundColor ${color}`;
+      console.log(`[CLIP][${type}]`, message, data);
+    } catch (error) {
+      console.error('Debug Log Fehler:', error);
+    }
+  };
 
   // Findet den nächsten Snap-Punkt für eine gegebene Position
   const findNearestSnapPoint = useCallback((position: number, duration: number): number => {
@@ -80,6 +101,19 @@ export function TrackClip({
       const rect = e.currentTarget.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const clipTime = mouseX / (settings.timeline.pixelsPerSecond * zoom);
+      
+      debugLog('Razor', 'Split Position', {
+        clipId: clip.id,
+        splitPoint: clip.start + clipTime,
+        clipStart: clip.start,
+        clipDuration: clip.duration,
+        position: {
+          x: mouseX,
+          absolute: e.clientX,
+          relative: mouseX - rect.left
+        }
+      }, 'Yellow');
+      
       onClipSplit?.(clip.id, clip.start + clipTime);
       return;
     }
@@ -96,6 +130,22 @@ export function TrackClip({
     // Prüfe ob wir auf einen der Trim-Griffe geklickt haben
     const isLeftHandle = clickX <= 6;
     const isRightHandle = clickX >= rect.width - 6;
+
+    debugLog('MouseDown', 'Clip Interaktion', {
+      clipId: clip.id,
+      position: {
+        x: clickX,
+        absolute: e.clientX,
+        relative: clickX
+      },
+      isLeftHandle,
+      isRightHandle,
+      clipInfo: {
+        start: clip.start,
+        duration: clip.duration,
+        end: clip.start + clip.duration
+      }
+    }, 'Green');
 
     if (isLeftHandle) {
       setIsTrimming('start');
@@ -142,6 +192,21 @@ export function TrackClip({
       const newStart = Math.max(0, originalStart + clampedDeltaTime);
       const newDuration = originalDuration - (newStart - originalStart);
 
+      debugLog('MouseMove', 'Trim Start', {
+        operation: 'trim_start',
+        clipId: clip.id,
+        delta: {
+          x: deltaX,
+          time: deltaTime
+        },
+        position: {
+          newStart,
+          newDuration,
+          originalStart,
+          originalDuration
+        }
+      }, 'Magenta');
+
       if (newDuration >= settings.clips.minDuration) {
         const snappedStart = findNearestSnapPoint(newStart, newDuration);
         if (!checkOverlap(snappedStart, newDuration)) {
@@ -156,6 +221,19 @@ export function TrackClip({
         originalDuration + deltaTime
       );
 
+      debugLog('MouseMove', 'Trim End', {
+        operation: 'trim_end',
+        clipId: clip.id,
+        delta: {
+          x: deltaX,
+          time: deltaTime
+        },
+        position: {
+          newDuration,
+          originalDuration
+        }
+      }, 'Magenta');
+
       if (!checkOverlap(clip.start, newDuration)) {
         onClipChange?.(clip.id, clip.start, newDuration);
       }
@@ -163,8 +241,22 @@ export function TrackClip({
       // Normales Verschieben
       const newStart = Math.max(0, originalStart + deltaTime);
       const snappedStart = findNearestSnapPoint(newStart, clip.duration);
-      
-      // Prüfe auf Überlappungen
+
+      debugLog('MouseMove', 'Drag', {
+        operation: 'drag',
+        clipId: clip.id,
+        delta: {
+          x: deltaX,
+          time: deltaTime
+        },
+        position: {
+          newStart,
+          snappedStart,
+          originalStart,
+          duration: clip.duration
+        }
+      }, 'Blue');
+
       if (!checkOverlap(snappedStart, clip.duration)) {
         onClipChange?.(clip.id, snappedStart, clip.duration);
         lastValidPosition.current = snappedStart;
@@ -179,7 +271,6 @@ export function TrackClip({
     zoom,
     clip,
     onClipChange,
-    snapEnabled,
     findNearestSnapPoint,
     checkOverlap
   ]);
@@ -200,6 +291,26 @@ export function TrackClip({
     }
   }, [isDragging, isTrimming, handleMouseMove, handleMouseUp]);
 
+  // Füge diese Funktion hinzu, um den Clip für Drag & Drop vorzubereiten
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
+    if (selectedTool !== 'select') {
+      e.preventDefault();
+      return;
+    }
+
+    const clipData = {
+      ...clip,
+      id: clip.id,
+      start: clip.start,
+      duration: clip.duration
+    };
+    
+    debugLog('DragStart', 'Clip Daten', clipData, 'Cyan');
+    
+    e.dataTransfer.setData('application/json', JSON.stringify(clipData));
+    e.dataTransfer.effectAllowed = 'copy';
+  };
+
   // Berechne die aktuelle Position basierend auf dem Zustand
   const currentPosition = clip.start;
 
@@ -207,15 +318,17 @@ export function TrackClip({
     <div
       className={`absolute h-full select-none ${
         clip.type === 'video' ? 'bg-blue-500/20' : 'bg-green-500/20'
-      } ${isDragging || isTrimming ? 'opacity-75' : ''} ${
+      } ${isDragging || isTrimming ? 'opacity-85' : ''} ${
         selectedTool === 'razor' ? 'cursor-crosshair' : 'cursor-move'
       } group`}
       style={{
-        left: `${(currentPosition * settings.timeline.pixelsPerSecond * zoom) + settings.tracks.headerWidth}px`,
+        left: `${(clip.start * settings.timeline.pixelsPerSecond * zoom) + settings.tracks.headerWidth}px`,
         width: `${clip.duration * settings.timeline.pixelsPerSecond * zoom}px`,
         transition: isDragging || isTrimming ? 'none' : 'left 0.1s ease-out'
       }}
       onMouseDown={handleMouseDown}
+      draggable={selectedTool === 'select'}
+      onDragStart={handleDragStart}
     >
       {/* Trim-Griff links */}
       <div
@@ -230,8 +343,8 @@ export function TrackClip({
       }`}>
         <div className="px-2 py-1">
           <div className="text-xs font-medium text-white/90 truncate">{clip.name}</div>
-          <div className="text-[10px] text-white/60">
-            {Math.floor(clip.duration)}s
+          <div className="text-[10px] text-white/60 text-center">
+            {formatSeconds(clip.duration)}
           </div>
         </div>
       </div>

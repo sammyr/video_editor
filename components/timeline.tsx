@@ -146,39 +146,40 @@ export function Timeline({
   }, [zoom]);
 
   return (
-    <div 
-      className="h-full bg-[#1e1e1e] overflow-hidden flex flex-col"
-      onMouseMove={handleTimelineMouseMove}
-      onMouseUp={handleTimelineMouseUp}
-      onMouseLeave={handleTimelineMouseUp}
-      ref={timelineRef}
-    >
-      <TimelineTools
-        zoom={zoom}
-        onZoomChange={handleZoomChange}
-        selectedTool={selectedTool}
-        onToolChange={handleToolChange}
-        currentTime={currentTime}
-        snapEnabled={snapEnabled}
-        onSnapChange={setSnapEnabled}
-      />
+    <div className="flex flex-col w-full h-full bg-[#1a1a1a] select-none">
+      {/* Werkzeugleiste */}
+      <div className="flex items-center h-12 px-4 bg-[#2b2b2b] border-b border-[#1a1a1a]">
+        <TimelineTools
+          selectedTool={selectedTool}
+          onToolChange={handleToolChange}
+          zoom={zoom}
+          onZoomChange={handleZoomChange}
+          snapEnabled={snapEnabled}
+          onSnapChange={setSnapEnabled}
+          currentTime={currentTime}
+        />
+      </div>
 
-      <TimelineRuler
-        zoom={zoom}
-        offset={timelineOffset}
-        width={timelineWidth}
-        duration={duration}
-      />
-
-      <div
-        className="flex-1 relative overflow-auto"
+      {/* Timeline-Container */}
+      <div 
+        ref={timelineRef}
+        className="relative flex flex-col flex-1 overflow-hidden"
         onMouseDown={handleTimelineMouseDown}
-        style={{ cursor: isDraggingTimeline ? 'grabbing' : selectedTool === 'razor' ? 'crosshair' : 'default' }}
+        onMouseMove={handleTimelineMouseMove}
+        onMouseUp={handleTimelineMouseUp}
+        onMouseLeave={handleTimelineMouseUp}
       >
-        <div
-          className="absolute inset-0"
-          style={{ transform: `translateX(${timelineOffset}px)` }}
-        >
+        {/* Zeitlineal */}
+        <TimelineRuler 
+          zoom={zoom}
+          duration={duration}
+          offset={timelineOffset}
+          width={timelineWidth}
+          currentTime={currentTime}
+        />
+
+        {/* Tracks */}
+        <div className="flex-1 overflow-y-auto">
           {tracks.map((track) => (
             <TrackComponent
               key={track.id}
@@ -187,12 +188,12 @@ export function Timeline({
               selectedTool={selectedTool}
               snapEnabled={snapEnabled}
               onClipSelect={onClipSelect}
-              onClipChange={(clipId, newStart, newDuration) =>
-                onClipChange(track.id, clipId, newStart, newDuration)
-              }
-              onClipSplit={(clipId, splitPoint) =>
-                handleClipSplit(track.id, clipId, splitPoint)
-              }
+              onClipChange={(clipId, newStart, newDuration) => {
+                onClipChange(track.id, clipId, newStart, newDuration);
+              }}
+              onClipSplit={(clipId, splitPoint) => {
+                handleClipSplit(track.id, clipId, splitPoint);
+              }}
             />
           ))}
         </div>

@@ -22,6 +22,12 @@ export function Editor() {
   const [timelineOffset, setTimelineOffset] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [timelineDuration, setTimelineDuration] = useState(settings.timeline.defaultDuration); // 60 Minuten
+  const [selectedTool, setSelectedTool] = useState('select');
+  const [snapEnabled, setSnapEnabled] = useState(false);
+
+  const toggleSnapping = () => {
+    setSnapEnabled(!snapEnabled);
+  };
 
   // Berechne die benötigte Timeline-Dauer basierend auf allen Clips
   const calculateRequiredDuration = (currentTracks: Track[]) => {
@@ -162,6 +168,57 @@ export function Editor() {
         <ResizableHandle withHandle />
         
         <ResizablePanel defaultSize={30}>
+          <div className="absolute top-0 left-0 flex items-center gap-1 p-2">
+            <button
+              onClick={() => setSelectedTool('select')}
+              className={`p-2 rounded hover:bg-white/5 transition-colors ${
+                selectedTool === 'select' ? 'bg-white/10' : ''
+              }`}
+              title="Auswahlwerkzeug (V)"
+            >
+              <svg className="w-4 h-4 text-white/80" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2z" />
+              </svg>
+            </button>
+
+            <button
+              onClick={() => setSelectedTool('razor')}
+              className={`p-2 rounded hover:bg-white/5 transition-colors ${
+                selectedTool === 'razor' ? 'bg-white/10' : ''
+              }`}
+              title="Rasiermesser (C)"
+            >
+              <svg className="w-4 h-4 text-white/80" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <button
+              onClick={() => setSelectedTool('hand')}
+              className={`p-2 rounded hover:bg-white/5 transition-colors ${
+                selectedTool === 'hand' ? 'bg-white/10' : ''
+              }`}
+              title="Hand-Werkzeug (H)"
+            >
+              <svg className="w-4 h-4 text-white/80" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11" />
+              </svg>
+            </button>
+
+            <div className="w-px h-4 mx-1 bg-white/20" />
+
+            <button
+              onClick={toggleSnapping}
+              className={`p-2 rounded hover:bg-white/5 transition-colors ${
+                snapEnabled ? 'bg-white/10' : ''
+              }`}
+              title="Snapping (S)"
+            >
+              <svg className="w-4 h-4 text-white/80" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7-6v12m-9-6h16" />
+              </svg>
+            </button>
+          </div>
           <Timeline 
             tracks={tracks}
             onClipSelect={handleClipSelect}

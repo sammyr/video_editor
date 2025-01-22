@@ -31,6 +31,7 @@ export interface EditorSettings {
     height: number;
     /** Breite des Spur-Headers in Pixeln */
     headerWidth: number;
+    gap: number;
   };
   clips: {
     /** Minimale Clip-Breite in Pixeln */
@@ -46,15 +47,16 @@ const defaultSettings: EditorSettings = {
     maxZoom: 2.0,
     zoomStep: 0.1,
     pixelsPerSecond: 100,
-    snapGrid: 1, // Auf 1 Sekunde setzen für präziseres Snapping
+    snapGrid: 5, // Auf 1 Sekunde setzen für präziseres Snapping
     markerInterval: 100,
     markerIntervalSmall: 200,
     smallZoomThreshold: 0.3,
     defaultDuration: 3600, // 60 Minuten in Sekunden
   },
   tracks: {
-    height: 96, // 24px * 4
-    headerWidth: 96,
+    height: 100,
+    headerWidth: 0,  // Temporär auf 0 gesetzt zum Testen
+    gap: 10
   },
   clips: {
     minWidth: 10,
